@@ -1,0 +1,67 @@
+# Ignore Gradle files
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.gradle/cache/
+.gradle/daemon/
+.gradle/wrapper/
+.gradle/gradle-app.setting
+.gradle/*.lock
+
+# Ignore Gradle generated files
+**/build/
+**/out/
+
+# Ignore JetBrains files
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Ignore local configuration files
+local.properties
+*.log
+*.env
+
+# Ignore IntelliJ IDEA generated files
+.idea/libraries
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/dictionaries
+.idea/jsLibraryMappings.xml
+.idea/caches/build_file_checksums.ser
+
+# Android specific files
+*.apk
+*.ap_
+*.dex
+*.class
+*.so
+*.log
+*.stacktrace
+*.db
+*.db-journal
+*.keystore
+*.jks
+*.cxx/
+*.hprof
+.DS_Store
+*.ogg
+*.mp3
+*.mp4
+*.webm
+
+# Ignore generated code from libraries
+app/build/
+
+# Ignore testing and coverage files
+**/bin/
+**/obj/
+**/.gradle/
+**/.idea/
+**/captures/
+**/target/
+
+# MacOS files
+*.DS_Store
+

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="16dp"
+    android:background="#F5F5F5">
+
+    <ImageButton
+        android:id="@+id/btnPhone"
+        style="@style/BottomNavButtonStyle"
+        android:src="@drawable/ic_phone"
+        android:contentDescription="Phone"/>
+
+    <ImageButton
+        android:id="@+id/btnHistory"
+        style="@style/BottomNavButtonStyle"
+        android:src="@drawable/ic_history"
+        android:contentDescription="History"/>
+
+    <ImageButton
+        android:id="@+id/btnContacts"
+        style="@style/BottomNavButtonStyle"
+        android:src="@drawable/ic_contacts"
+        android:contentDescription="Contacts"/>
+
+</LinearLayout>
