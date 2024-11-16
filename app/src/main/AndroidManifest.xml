@@ -32,9 +32,20 @@
         <activity
             android:name=".activities.IncomingCallActivity"
             android:exported="false" />
+
         <activity
             android:name=".activities.InCallActivity"
-            android:exported="false" />
+            android:launchMode="singleTop"
+            android:exported="false"
+            android:showOnLockScreen="true"
+            android:excludeFromRecents="true"
+            android:turnScreenOn="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -70,12 +81,13 @@
 
         <service
             android:name=".services.CallService"
-            android:foregroundServiceType="phoneCall"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.BIND_DIALER">
+            android:permission="android.permission.BIND_INCALL_SERVICE"
+            android:exported="true">
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_UI"
+                android:value="true" />
             <intent-filter>
-                <action android:name="android.intent.action.CALL" />
+                <action android:name="android.telecom.InCallService"/>
             </intent-filter>
         </service>
         <service

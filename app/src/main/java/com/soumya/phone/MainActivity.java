@@ -1,16 +1,14 @@
 package com.soumya.phone;
+
 import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.role.RoleManager;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.telecom.TelecomManager;
 import android.util.Log;
 import android.view.View;
@@ -24,6 +22,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.soumya.phone.activities.InCallActivity;
+import com.soumya.phone.helpers.CallNotificationHelper;
 import com.soumya.phone.services.CallService;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
@@ -54,22 +53,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     // Service related
     private CallService callService;
-    private boolean serviceBound = false;
-
-    private final ServiceConnection serviceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            CallService.LocalBinder binder = (CallService.LocalBinder) service;
-            callService = binder.getService();
-            serviceBound = true;
-            setupCallService();
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            serviceBound = false;
-        }
-    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,7 +64,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         phoneNumber = new StringBuilder();
 
         if (hasAllPermissions()) {
-            startAndBindCallService();
             requestDefaultDialerRole();
         } else {
             requestPermissions();
@@ -89,8 +71,133 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         createNotificationChannel();
         requestNotificationPermission();
+
+        logServiceStatus();
+
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+    }
+
+
+    private void logServiceStatus() {
+        CallService service = CallService.getInstance();
+        TelecomManager telecomManager = (TelecomManager) getSystemService(Context.TELECOM_SERVICE);
+
+        Log.d(TAG, "Service Status Check:");
+        Log.d(TAG, "CallService instance: " + (service != null ? "Available" : "Null"));
+        Log.d(TAG, "Is Default Dialer: " +
+                (telecomManager != null &&
+                        getPackageName().equals(telecomManager.getDefaultDialerPackage())));
+        Log.d(TAG, "Has All Permissions: " + hasAllPermissions());
+    }
+
+    private void initializeViews() {
+        phoneNumberText = findViewById(R.id.phoneNumberText);
+        backspaceButton = findViewById(R.id.backspaceButton);
+        callButton = findViewById(R.id.callButton);
+        bottomNavigation = findViewById(R.id.bottomNavigation);
+
+        // Initialize dialpad buttons
+        int[] buttonIds = {
+                R.id.button0, R.id.button1, R.id.button2, R.id.button3,
+                R.id.button4, R.id.button5, R.id.button6, R.id.button7,
+                R.id.button8, R.id.button9
+        };
+
+        for (int id : buttonIds) {
+            Button button = findViewById(id);
+            if (button != null) {
+                button.setOnClickListener(this);
+            }
+        }
+    }
+
+    private void setupClickListeners() {
+        backspaceButton.setOnClickListener(v -> {
+            if (phoneNumber.length() > 0) {
+                phoneNumber.deleteCharAt(phoneNumber.length() - 1);
+                updatePhoneNumberDisplay();
+            }
+        });
+
+        backspaceButton.setOnLongClickListener(v -> {
+            phoneNumber.setLength(0);
+            updatePhoneNumberDisplay();
+            return true;
+        });
+
+        callButton.setOnClickListener(v -> initiateCall());
+    }
+
+    @Override
+    public void onClick(View v) {
+        if (v instanceof Button) {
+            String digit = ((Button) v).getText().toString();
+            phoneNumber.append(digit);
+            updatePhoneNumberDisplay();
+        }
+    }
+
+    private void updatePhoneNumberDisplay() {
+        phoneNumberText.setText(phoneNumber.toString());
+    }
+
+    private void initiateCall() {
+        if (phoneNumber.length() > 0) {
+            if (hasAllPermissions()) {
+                // Check if we are the default dialer
+                TelecomManager telecomManager = (TelecomManager) getSystemService(Context.TELECOM_SERVICE);
+                if (telecomManager != null &&
+                        !getPackageName().equals(telecomManager.getDefaultDialerPackage())) {
+                    Toast.makeText(this, "Please set as default dialer app",
+                            Toast.LENGTH_SHORT).show();
+                    requestDefaultDialerRole();
+                    return;
+                }
+
+                // Get CallService instance
+                CallService callService = CallService.getInstance();
+
+                if (callService == null) {
+                    Log.d(TAG, "CallService not initialized, requesting role and permissions");
+                    // Make sure we have proper permissions and default dialer status
+                    requestDefaultDialerRole();
+                    return;
+                }
+
+                if (!callService.isCallActive()) {
+                    String number = phoneNumber.toString();
+                    // Launch InCallActivity first
+                    launchInCallActivity(number);
+                    // Then make the call
+                    callService.makeCall(number);
+                } else {
+                    Toast.makeText(this, "Call already in progress",
+                            Toast.LENGTH_SHORT).show();
+                    launchInCallActivity(callService.getCurrentCallNumber());
+                }
+            } else {
+                requestPermissions();
+            }
+        } else {
+            Toast.makeText(this, "Please enter a phone number",
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void launchInCallActivity(String phoneNumber) {
+        runOnUiThread(() -> {
+            Intent inCallIntent = new Intent(this, InCallActivity.class);
+            inCallIntent.putExtra("phoneNumber", phoneNumber);
+            inCallIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(inCallIntent);
+        });
+    }
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -120,169 +227,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        checkActiveCall();
-    }
-
-    private void checkActiveCall() {
-        if (serviceBound && callService != null) {
-            if (callService.isCallActive()) {
-                String number = callService.getCurrentCallNumber();
-                if (number != null) {
-                    launchInCallActivity(number);
-                }
-            }
-        }
-    }
-
-    private void initializeViews() {
-        phoneNumberText = findViewById(R.id.phoneNumberText);
-        backspaceButton = findViewById(R.id.backspaceButton);
-        callButton = findViewById(R.id.callButton);
-        bottomNavigation = findViewById(R.id.bottomNavigation);
-
-        // Initialize dialpad buttons
-        int[] buttonIds = {
-                R.id.button0, R.id.button1, R.id.button2, R.id.button3,
-                R.id.button4, R.id.button5, R.id.button6, R.id.button7,
-                R.id.button8, R.id.button9
-        };
-
-        for (int id : buttonIds) {
-            Button button = findViewById(id);
-            if (button != null) {
-                button.setOnClickListener(this);
-            }
-        }
-    }
-
-    private void setupClickListeners() {
-        // Backspace button click and long click
-        backspaceButton.setOnClickListener(v -> {
-            if (phoneNumber.length() > 0) {
-                phoneNumber.deleteCharAt(phoneNumber.length() - 1);
-                updatePhoneNumberDisplay();
-            }
-        });
-
-        backspaceButton.setOnLongClickListener(v -> {
-            phoneNumber.setLength(0);
-            updatePhoneNumberDisplay();
-            return true;
-        });
-
-        // Call button
-        callButton.setOnClickListener(v -> initiateCall());
-
-        // Bottom navigation click listeners
-//        if (bottomNavigation != null) {
-//            View contactsButton = bottomNavigation.findViewById(R.id.contactsTab);
-//            View recentsButton = bottomNavigation.findViewById(R.id.recentsTab);
-//
-//            if (contactsButton != null) {
-//                contactsButton.setOnClickListener(v -> {
-//                    Intent intent = new Intent(this, ContactsActivity.class);
-//                    startActivity(intent);
-//                });
-//            }
-//
-//            if (recentsButton != null) {
-//                recentsButton.setOnClickListener(v -> {
-//                    Intent intent = new Intent(this, RecentsActivity.class);
-//                    startActivity(intent);
-//                });
-//            }
-//        }
-    }
-
-    private void startAndBindCallService() {
-        Intent intent = new Intent(this, CallService.class);
-        startService(intent);
-        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
-    }
-
-    private void setupCallService() {
-        if (serviceBound && callService != null) {
-            callService.setCallStateListener(new CallService.CallStateListener() {
-                @Override
-                public void onOutgoingCallStarted(String number) {
-                    launchInCallActivity(number);
-//                    finish();
-                }
-
-                @Override
-                public void onCallEnded() {
-                    runOnUiThread(() ->
-                            Toast.makeText(MainActivity.this, "Call ended",
-                                    Toast.LENGTH_SHORT).show()
-                    );
-                }
-
-                @Override
-                public void onCallFailed(String reason) {
-                    runOnUiThread(() ->
-                            Toast.makeText(MainActivity.this, "Call failed: " + reason,
-                                    Toast.LENGTH_SHORT).show()
-                    );
-                }
-            });
-        }
-    }
-
-    @Override
-    public void onClick(View v) {
-        if (v instanceof Button) {
-            String digit = ((Button) v).getText().toString();
-            phoneNumber.append(digit);
-            updatePhoneNumberDisplay();
-        }
-    }
-
-    private void updatePhoneNumberDisplay() {
-        phoneNumberText.setText(phoneNumber.toString());
-    }
-
-    private void initiateCall() {
-        if (phoneNumber.length() > 0) {
-            if (hasAllPermissions()) {
-                if (serviceBound && callService != null) {
-                    if (!callService.isCallActive()) {
-                        String number = phoneNumber.toString();
-                        // Launch InCallActivity first
-                        launchInCallActivity(number);
-                        // Then make the call
-                        callService.makeCall(number);
-                    } else {
-                        Toast.makeText(this, "Call already in progress",
-                                Toast.LENGTH_SHORT).show();
-                        launchInCallActivity(callService.getCurrentCallNumber());
-                    }
-                } else {
-                    Toast.makeText(this, "Service not bound",
-                            Toast.LENGTH_SHORT).show();
-                }
-            } else {
-                requestPermissions();
-            }
-        } else {
-            Toast.makeText(this, "Please enter a phone number",
-                    Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void launchInCallActivity(String phoneNumber) {
-        runOnUiThread(() -> {
-            Intent inCallIntent = new Intent(this, InCallActivity.class);
-            inCallIntent.putExtra("phoneNumber", phoneNumber);
-            inCallIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(inCallIntent);
-        });
-    }
-
     private boolean hasAllPermissions() {
         for (String permission : REQUIRED_PERMISSIONS) {
             if (ContextCompat.checkSelfPermission(this, permission)
@@ -306,15 +250,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     startActivityForResult(intent, REQUEST_ID);
                 }
             }
-        } else { // API level below 29
+        } else {
             TelecomManager telecomManager = (TelecomManager) getSystemService(TELECOM_SERVICE);
             if (telecomManager != null && !getPackageName().equals(telecomManager.getDefaultDialerPackage())) {
                 Intent intent = new Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER);
                 intent.putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, getPackageName());
                 startActivityForResult(intent, REQUEST_ID);
-            } else {
-                // App is already the default dialer
-                Toast.makeText(this, "Your app is already the default dialer", Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -339,7 +280,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_REQUEST_CODE) {
             if (hasAllPermissions()) {
-                startAndBindCallService();
                 requestDefaultDialerRole();
             } else {
                 showPermissionExplanationDialog();
@@ -355,14 +295,5 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 .setNegativeButton("Cancel", (dialog, which) -> finish())
                 .setCancelable(false)
                 .show();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (serviceBound) {
-            unbindService(serviceConnection);
-            serviceBound = false;
-        }
     }
 }
